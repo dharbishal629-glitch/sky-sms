@@ -595,6 +595,51 @@ async function getAccount(userId: string, authUser?: AuthUser) {
   };
 }
 
+// ─── Public status endpoint (no auth required) ───────────────────────────────
+router.get("/status", async (_req, res) => {
+  const checkedAt = new Date().toISOString();
+  const components: Array<{ name: string; status: string; responseTime?: number; message: string }> = [];
+
+  // API Server — always operational if we're responding
+  components.push({ name: "API Server", status: "operational", responseTime: 1, message: "API server is responding normally." });
+
+  // Database
+  const dbStart = Date.now();
+  try {
+    await pool.query("SELECT 1");
+    components.push({ name: "Database", status: "operational", responseTime: Date.now() - dbStart, message: "Database is connected and responding." });
+  } catch {
+    components.push({ name: "Database", status: "outage", message: "Database connection failed." });
+  }
+
+  // SMS Provider (Hero SMS)
+  const smsStatus = await heroProviderStatus().catch(() => providerStatus("Hero SMS"));
+  components.push({
+    name: "SMS Provider",
+    status: smsStatus.mode === "live" ? "operational" : "degraded",
+    message: smsStatus.message,
+  });
+
+  // Payment Gateway (OxaPay)
+  const payStatus = providerStatus("OxaPay");
+  components.push({
+    name: "Payment Gateway",
+    status: payStatus.mode === "live" ? "operational" : "degraded",
+    message: payStatus.message,
+  });
+
+  const hasOutage = components.some(c => c.status === "outage");
+  const hasDegraded = components.some(c => c.status === "degraded");
+  const overall = hasOutage ? "outage" : hasDegraded ? "degraded" : "operational";
+  const overallMessage = hasOutage
+    ? "Some systems are experiencing an outage."
+    : hasDegraded
+    ? "Some systems are not fully configured."
+    : "All Systems Operational";
+
+  res.json({ status: overall, message: overallMessage, checkedAt, components });
+});
+
 router.use(async (_req, res, next) => {
   try {
     await ensureSimSchema();

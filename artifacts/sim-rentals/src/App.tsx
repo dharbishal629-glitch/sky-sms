@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Terms from "@/pages/Terms";
 import RefundPolicy from "@/pages/RefundPolicy";
+import StatusPage from "@/pages/Status";
 import { AppRoutes } from "./Routes";
 import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
@@ -385,6 +386,7 @@ function AppWithRoutes() {
       <Route path="/sign-up/*?" component={AuthPage} />
       <Route path="/terms" component={Terms} />
       <Route path="/refund-policy" component={RefundPolicy} />
+      <Route path="/status" component={StatusPage} />
 
       <Route path="/dashboard" component={AppRoutes} />
       <Route path="/rent" component={AppRoutes} />
