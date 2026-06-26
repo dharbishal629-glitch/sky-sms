@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: sim-rentals-api
+    runtime: node
+    region: oregon
+    plan: free
+    buildCommand: npm install -g pnpm@10.26.1 && pnpm install --no-frozen-lockfile && pnpm run build:render
+    startCommand: pnpm run start:render
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22

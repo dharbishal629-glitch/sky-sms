@@ -1,0 +1,523 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: account
+    description: Account operations
+  - name: catalog
+    description: SIM catalog operations
+  - name: rentals
+    description: Rental operations
+  - name: payments
+    description: Payment operations
+  - name: admin
+    description: Admin operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /me:
+    get:
+      operationId: getMe
+      tags: [account]
+      summary: Get the current account
+      responses:
+        "200":
+          description: Current account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Account"
+  /dashboard:
+    get:
+      operationId: getDashboard
+      tags: [account]
+      summary: Get user dashboard data
+      responses:
+        "200":
+          description: Dashboard data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dashboard"
+  /catalog/countries:
+    get:
+      operationId: listCountries
+      tags: [catalog]
+      summary: List available countries
+      responses:
+        "200":
+          description: Available countries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  countries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Country"
+                  provider:
+                    $ref: "#/components/schemas/ProviderStatus"
+                required: [countries, provider]
+  /catalog/services:
+    get:
+      operationId: listServices
+      tags: [catalog]
+      summary: List available services
+      parameters:
+        - in: query
+          name: countryCode
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Available services
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  services:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Service"
+                  provider:
+                    $ref: "#/components/schemas/ProviderStatus"
+                required: [services, provider]
+  /catalog/availability:
+    get:
+      operationId: getAvailability
+      tags: [catalog]
+      summary: Get live service availability
+      parameters:
+        - in: query
+          name: countryCode
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: serviceCode
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Availability details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Availability"
+  /rentals:
+    get:
+      operationId: listRentals
+      tags: [rentals]
+      summary: List user rentals
+      responses:
+        "200":
+          description: User rentals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rentals:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Rental"
+                required: [rentals]
+    post:
+      operationId: createRental
+      tags: [rentals]
+      summary: Rent a SIM number
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRentalRequest"
+      responses:
+        "200":
+          description: Created rental
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rental"
+  /rentals/{id}/refresh:
+    post:
+      operationId: refreshRental
+      tags: [rentals]
+      summary: Refresh SMS messages for a rental
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated rental
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rental"
+  /rentals/{id}/cancel:
+    post:
+      operationId: cancelRental
+      tags: [rentals]
+      summary: Cancel a rental
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cancelled rental
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Rental"
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: List user payments
+      responses:
+        "200":
+          description: User payments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payments:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Payment"
+                required: [payments]
+  /payments/checkout:
+    post:
+      operationId: createPaymentCheckout
+      tags: [payments]
+      summary: Create an OxaPay checkout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePaymentRequest"
+      responses:
+        "200":
+          description: Payment checkout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentCheckout"
+  /admin/overview:
+    get:
+      operationId: getAdminOverview
+      tags: [admin]
+      summary: Get admin overview
+      responses:
+        "200":
+          description: Admin overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOverview"
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      tags: [admin]
+      summary: List users for admin
+      responses:
+        "200":
+          description: Admin users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AdminUser"
+                required: [users]
+  /admin/transactions:
+    get:
+      operationId: listAdminTransactions
+      tags: [admin]
+      summary: List platform transactions
+      responses:
+        "200":
+          description: Admin transactions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AdminTransaction"
+                required: [transactions]
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+    ProviderStatus:
+      type: object
+      properties:
+        name:
+          type: string
+        mode:
+          type: string
+          enum: [live, setup_required]
+        message:
+          type: string
+      required: [name, mode, message]
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+        credits:
+          type: number
+        avatarUrl:
+          type: string
+      required: [id, name, email, role, credits]
+    Dashboard:
+      type: object
+      properties:
+        account:
+          $ref: "#/components/schemas/Account"
+        activeRentals:
+          type: integer
+        completedRentals:
+          type: integer
+        totalSpent:
+          type: number
+        recentRentals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Rental"
+        recentPayments:
+          type: array
+          items:
+            $ref: "#/components/schemas/Payment"
+        providerStatuses:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderStatus"
+      required: [account, activeRentals, completedRentals, totalSpent, recentRentals, recentPayments, providerStatuses]
+    Country:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        flag:
+          type: string
+        available:
+          type: integer
+        startingPrice:
+          type: number
+      required: [code, name, flag, available, startingPrice]
+    Service:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        available:
+          type: integer
+        price:
+          type: number
+      required: [code, name, category, available, price]
+    Availability:
+      type: object
+      properties:
+        countryCode:
+          type: string
+        serviceCode:
+          type: string
+        available:
+          type: integer
+        price:
+          type: number
+        estimatedWait:
+          type: string
+        provider:
+          $ref: "#/components/schemas/ProviderStatus"
+      required: [countryCode, serviceCode, available, price, estimatedWait, provider]
+    SmsMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        sender:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+        receivedAt:
+          type: string
+      required: [id, sender, message, receivedAt]
+    Rental:
+      type: object
+      properties:
+        id:
+          type: string
+        countryCode:
+          type: string
+        countryName:
+          type: string
+        serviceCode:
+          type: string
+        serviceName:
+          type: string
+        phoneNumber:
+          type: string
+        price:
+          type: number
+        status:
+          type: string
+          enum: [active, sms_received, completed, cancelled, expired, failed]
+        createdAt:
+          type: string
+        expiresAt:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/SmsMessage"
+      required: [id, countryCode, countryName, serviceCode, serviceName, phoneNumber, price, status, createdAt, expiresAt, messages]
+    CreateRentalRequest:
+      type: object
+      properties:
+        countryCode:
+          type: string
+        serviceCode:
+          type: string
+      required: [countryCode, serviceCode]
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+        amount:
+          type: number
+        credits:
+          type: number
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [pending, paid, failed, expired]
+        provider:
+          type: string
+        createdAt:
+          type: string
+      required: [id, amount, credits, currency, status, provider, createdAt]
+    CreatePaymentRequest:
+      type: object
+      properties:
+        amount:
+          type: number
+        currency:
+          type: string
+      required: [amount, currency]
+    PaymentCheckout:
+      type: object
+      properties:
+        payment:
+          $ref: "#/components/schemas/Payment"
+        checkoutUrl:
+          type: string
+        provider:
+          $ref: "#/components/schemas/ProviderStatus"
+      required: [payment, checkoutUrl, provider]
+    AdminOverview:
+      type: object
+      properties:
+        totalUsers:
+          type: integer
+        activeRentals:
+          type: integer
+        revenue:
+          type: number
+        pendingPayments:
+          type: integer
+        providerStatuses:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProviderStatus"
+      required: [totalUsers, activeRentals, revenue, pendingPayments, providerStatuses]
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        credits:
+          type: number
+        rentals:
+          type: integer
+        status:
+          type: string
+      required: [id, name, email, role, credits, rentals, status]
+    AdminTransaction:
+      type: object
+      properties:
+        id:
+          type: string
+        userEmail:
+          type: string
+        type:
+          type: string
+        amount:
+          type: number
+        status:
+          type: string
+        createdAt:
+          type: string
+      required: [id, userEmail, type, amount, status, createdAt]

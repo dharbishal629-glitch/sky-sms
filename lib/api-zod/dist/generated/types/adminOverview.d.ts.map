@@ -1,0 +1,1 @@
+{"version":3,"file":"adminOverview.d.ts","sourceRoot":"","sources":["../../../src/generated/types/adminOverview.ts"],"names":[],"mappings":"AAAA;;;;;;GAMG;AACH,OAAO,KAAK,EAAE,cAAc,EAAE,MAAM,kBAAkB,CAAC;AAEvD,MAAM,WAAW,aAAa;IAC5B,UAAU,EAAE,MAAM,CAAC;IACnB,aAAa,EAAE,MAAM,CAAC;IACtB,OAAO,EAAE,MAAM,CAAC;IAChB,eAAe,EAAE,MAAM,CAAC;IACxB,gBAAgB,EAAE,cAAc,EAAE,CAAC;CACpC"}
