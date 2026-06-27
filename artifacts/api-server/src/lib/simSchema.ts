@@ -260,6 +260,34 @@ async function createSchema() {
 
     -- Support message image attachments
     ALTER TABLE sim_support_messages ADD COLUMN IF NOT EXISTS image_url TEXT;
+
+    -- Status incidents
+    CREATE TABLE IF NOT EXISTS sim_status_incidents (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'investigating',
+      components TEXT[] NOT NULL DEFAULT '{}',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      resolved_at TIMESTAMPTZ,
+      created_by TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS sim_status_incident_updates (
+      id TEXT PRIMARY KEY,
+      incident_id TEXT NOT NULL REFERENCES sim_status_incidents(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'update',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- API response time metrics (recorded each time /api/status is polled)
+    CREATE TABLE IF NOT EXISTS sim_status_metrics (
+      id SERIAL PRIMARY KEY,
+      metric TEXT NOT NULL DEFAULT 'api_response_ms',
+      value NUMERIC NOT NULL,
+      recorded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `);
 
   await pool.query(

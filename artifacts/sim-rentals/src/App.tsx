@@ -408,6 +408,7 @@ function AppWithRoutes() {
       <Route path="/admin/coupons" component={AppRoutes} />
       <Route path="/admin/notifications" component={AppRoutes} />
       <Route path="/admin/gateways" component={AppRoutes} />
+      <Route path="/admin/status" component={AppRoutes} />
 
       <Route component={NotFound} />
     </Switch>

@@ -39,6 +39,7 @@ const adminItems = [
   { href: "/admin/notifications",   labelKey: null,     icon: Bell,             label: "Announcements"},
   { href: "/admin/support",         labelKey: null,     icon: LifeBuoy,         label: "Support"      },
   { href: "/admin/gateways",        labelKey: null,     icon: Bitcoin,          label: "Gateways"     },
+  { href: "/admin/status",          labelKey: null,     icon: Activity,         label: "Status Page"  },
 ];
 
 interface Notification {

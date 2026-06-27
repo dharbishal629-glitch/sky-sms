@@ -15,6 +15,7 @@ import AdminSupportConversation from "@/pages/admin/AdminSupportConversation";
 import AdminCoupons from "@/pages/admin/Coupons";
 import AdminNotifications from "@/pages/admin/Notifications";
 import AdminPaymentGateways from "@/pages/admin/PaymentGateways";
+import AdminStatusIncidents from "@/pages/admin/StatusIncidents";
 import Support from "@/pages/Support";
 import SupportConversation from "@/pages/SupportConversation";
 import ApiDocs from "@/pages/ApiDocs";
@@ -118,6 +119,7 @@ export function AppRoutes() {
       <Route path="/admin/coupons"><AdminRoute component={AdminCoupons} /></Route>
       <Route path="/admin/notifications"><AdminRoute component={AdminNotifications} /></Route>
       <Route path="/admin/gateways"><AdminRoute component={AdminPaymentGateways} /></Route>
+      <Route path="/admin/status"><AdminRoute component={AdminStatusIncidents} /></Route>
     </Switch>
   );
 }

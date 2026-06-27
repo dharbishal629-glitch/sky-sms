@@ -595,38 +595,49 @@ async function getAccount(userId: string, authUser?: AuthUser) {
   };
 }
 
-// ─── Public status endpoint (no auth required) ───────────────────────────────
+// ─── Public status endpoints (no auth required) ──────────────────────────────
+
+const STATUS_COMPONENTS = ["Website", "API", "Payments", "Notifications", "Server Web Pages"] as const;
+
 router.get("/status", async (_req, res) => {
   const checkedAt = new Date().toISOString();
-  const components: Array<{ name: string; status: string; responseTime?: number; message: string }> = [];
 
-  // API Server — always operational if we're responding
-  components.push({ name: "API Server", status: "operational", responseTime: 1, message: "API server is responding normally." });
-
-  // Database
+  // Measure real DB response time
   const dbStart = Date.now();
+  let dbOk = true;
+  try { await pool.query("SELECT 1"); } catch { dbOk = false; }
+  const dbMs = Date.now() - dbStart;
+
+  // Record metric (fire and forget, don't block response)
+  pool.query(
+    "INSERT INTO sim_status_metrics (metric, value, recorded_at) VALUES ('api_response_ms', $1, NOW())",
+    [dbMs],
+  ).catch(() => null);
+
+  // Prune metrics older than 90 days (occasional cleanup, non-blocking)
+  pool.query("DELETE FROM sim_status_metrics WHERE recorded_at < NOW() - INTERVAL '90 days'").catch(() => null);
+
+  // Get active (non-resolved) incidents to determine component status
+  let activeIncidents: Array<{ components: string[]; status: string }> = [];
   try {
-    await pool.query("SELECT 1");
-    components.push({ name: "Database", status: "operational", responseTime: Date.now() - dbStart, message: "Database is connected and responding." });
-  } catch {
-    components.push({ name: "Database", status: "outage", message: "Database connection failed." });
-  }
+    const result = await pool.query(
+      "SELECT components, status FROM sim_status_incidents WHERE resolved_at IS NULL ORDER BY created_at DESC",
+    );
+    activeIncidents = result.rows.map(r => ({ components: r.components as string[], status: r.status as string }));
+  } catch { /* ignore if table not ready yet */ }
 
-  // SMS Provider (Hero SMS)
-  const smsStatus = await heroProviderStatus().catch(() => providerStatus("Hero SMS"));
-  components.push({
-    name: "SMS Provider",
-    status: smsStatus.mode === "live" ? "operational" : "degraded",
-    message: smsStatus.message,
-  });
+  const componentStatus = (name: string): "operational" | "degraded" | "outage" => {
+    if (!dbOk && name === "API") return "degraded";
+    const incident = activeIncidents.find(inc => inc.components.includes(name));
+    if (!incident) return "operational";
+    if (incident.status === "identified") return "outage";
+    return "degraded";
+  };
 
-  // Payment Gateway (OxaPay)
-  const payStatus = providerStatus("OxaPay");
-  components.push({
-    name: "Payment Gateway",
-    status: payStatus.mode === "live" ? "operational" : "degraded",
-    message: payStatus.message,
-  });
+  const components = STATUS_COMPONENTS.map(name => ({
+    name,
+    status: componentStatus(name),
+  }));
 
   const hasOutage = components.some(c => c.status === "outage");
   const hasDegraded = components.some(c => c.status === "degraded");
@@ -634,10 +645,119 @@ router.get("/status", async (_req, res) => {
   const overallMessage = hasOutage
     ? "Some systems are experiencing an outage."
     : hasDegraded
-    ? "Some systems are not fully configured."
+    ? "Some systems are experiencing degraded performance."
     : "All Systems Operational";
 
   res.json({ status: overall, message: overallMessage, checkedAt, components });
+});
+
+router.get("/status/incidents", async (_req, res) => {
+  try {
+    await ensureSimSchema();
+    const result = await pool.query(`
+      SELECT i.*, 
+        COALESCE(
+          json_agg(u ORDER BY u.created_at ASC) FILTER (WHERE u.id IS NOT NULL), '[]'
+        ) AS updates
+      FROM sim_status_incidents i
+      LEFT JOIN sim_status_incident_updates u ON u.incident_id = i.id
+      WHERE i.created_at > NOW() - INTERVAL '90 days'
+      GROUP BY i.id
+      ORDER BY i.created_at DESC
+      LIMIT 50
+    `);
+    res.json({ incidents: result.rows });
+  } catch { res.json({ incidents: [] }); }
+});
+
+router.get("/status/metrics", async (_req, res) => {
+  try {
+    await ensureSimSchema();
+    const result = await pool.query(`
+      SELECT
+        DATE_TRUNC('day', recorded_at) AS day,
+        AVG(value)::INTEGER AS avg_ms,
+        MAX(value)::INTEGER AS max_ms
+      FROM sim_status_metrics
+      WHERE metric = 'api_response_ms'
+        AND recorded_at > NOW() - INTERVAL '30 days'
+      GROUP BY DATE_TRUNC('day', recorded_at)
+      ORDER BY day ASC
+    `);
+    res.json({ metrics: result.rows });
+  } catch { res.json({ metrics: [] }); }
+});
+
+// ─── Admin incident management ────────────────────────────────────────────────
+
+router.post("/admin/status/incidents", async (req, res) => {
+  if (!req.isAuthenticated() || !isAdminEmail((req.user as { email?: string })?.email ?? "")) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+  const { title, body, status: incStatus, components } = req.body as Record<string, unknown>;
+  if (!title || !body) { res.status(400).json({ error: "Title and body are required." }); return; }
+  const validStatuses = ["investigating", "identified", "monitoring", "resolved"];
+  const safeStatus = validStatuses.includes(String(incStatus)) ? String(incStatus) : "investigating";
+  const safeComponents = Array.isArray(components)
+    ? (components as string[]).filter(c => (STATUS_COMPONENTS as readonly string[]).includes(c))
+    : [];
+  const id = crypto.randomUUID();
+  const resolvedAt = safeStatus === "resolved" ? new Date().toISOString() : null;
+  const result = await pool.query(
+    `INSERT INTO sim_status_incidents (id, title, body, status, components, resolved_at, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [id, String(title).slice(0, 200), String(body).slice(0, 2000), safeStatus, safeComponents, resolvedAt, req.user.id],
+  );
+  res.json({ incident: result.rows[0] });
+});
+
+router.post("/admin/status/incidents/:id/updates", async (req, res) => {
+  if (!req.isAuthenticated() || !isAdminEmail((req.user as { email?: string })?.email ?? "")) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+  const { id } = req.params;
+  const { body, status: incStatus } = req.body as Record<string, unknown>;
+  if (!body) { res.status(400).json({ error: "Body is required." }); return; }
+  const validStatuses = ["investigating", "identified", "monitoring", "resolved", "update"];
+  const safeStatus = validStatuses.includes(String(incStatus)) ? String(incStatus) : "update";
+  const updateId = crypto.randomUUID();
+  await pool.query(
+    "INSERT INTO sim_status_incident_updates (id, incident_id, body, status) VALUES ($1, $2, $3, $4)",
+    [updateId, id, String(body).slice(0, 2000), safeStatus],
+  );
+  if (safeStatus === "resolved") {
+    await pool.query(
+      "UPDATE sim_status_incidents SET status = 'resolved', resolved_at = NOW() WHERE id = $1",
+      [id],
+    );
+  } else {
+    await pool.query("UPDATE sim_status_incidents SET status = $1 WHERE id = $2", [safeStatus, id]);
+  }
+  res.json({ ok: true });
+});
+
+router.patch("/admin/status/incidents/:id", async (req, res) => {
+  if (!req.isAuthenticated() || !isAdminEmail((req.user as { email?: string })?.email ?? "")) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+  const { id } = req.params;
+  const { status: incStatus } = req.body as Record<string, unknown>;
+  const validStatuses = ["investigating", "identified", "monitoring", "resolved"];
+  if (!validStatuses.includes(String(incStatus))) { res.status(400).json({ error: "Invalid status." }); return; }
+  const resolvedAt = incStatus === "resolved" ? new Date().toISOString() : null;
+  await pool.query(
+    "UPDATE sim_status_incidents SET status = $1, resolved_at = $2 WHERE id = $3",
+    [incStatus, resolvedAt, id],
+  );
+  res.json({ ok: true });
+});
+
+router.delete("/admin/status/incidents/:id", async (req, res) => {
+  if (!req.isAuthenticated() || !isAdminEmail((req.user as { email?: string })?.email ?? "")) {
+    res.status(403).json({ error: "Forbidden" }); return;
+  }
+  await pool.query("DELETE FROM sim_status_incidents WHERE id = $1", [req.params.id]);
+  res.json({ ok: true });
 });
 
 router.use(async (_req, res, next) => {

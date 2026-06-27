@@ -1,348 +1,449 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link } from "wouter";
 import { SkySmsLogo } from "@/components/SkySmsLogo";
-import {
-  CheckCircle2, AlertTriangle, XCircle, RefreshCw,
-  Server, Database, MessageSquare, CreditCard, Globe,
-  ExternalLink, Clock,
-} from "lucide-react";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
 
-interface Component {
-  name: string;
-  status: "operational" | "degraded" | "outage";
-  responseTime?: number;
-  message: string;
+interface Component { name: string; status: "operational" | "degraded" | "outage" }
+interface Incident {
+  id: string; title: string; body: string; status: string;
+  components: string[]; created_at: string; resolved_at: string | null;
+  updates: Array<{ id: string; body: string; status: string; created_at: string }>;
 }
+interface MetricDay { day: string; avg_ms: number; max_ms: number }
 interface StatusData {
   status: "operational" | "degraded" | "outage";
-  message: string;
-  checkedAt: string;
-  components: Component[];
+  message: string; checkedAt: string; components: Component[];
 }
 
-const COMPONENT_ICONS: Record<string, typeof Server> = {
-  "API Server": Server,
-  "Database": Database,
-  "SMS Provider": MessageSquare,
-  "Payment Gateway": CreditCard,
-  "Website": Globe,
+const BANNER = {
+  operational: { bg: "#1b9e3e", text: "All Systems Operational" },
+  degraded:    { bg: "#c27c0e", text: "Degraded Performance"   },
+  outage:      { bg: "#b42a2a", text: "Major Outage"           },
 };
 
-const STATUS_CONFIG = {
-  operational: {
-    label: "Operational",
-    dot: "bg-emerald-400",
-    text: "text-emerald-400",
-    bg: "bg-emerald-500/[0.07]",
-    border: "border-emerald-500/20",
-    icon: CheckCircle2,
-    glow: "shadow-[0_0_20px_rgba(52,211,153,0.15)]",
-  },
-  degraded: {
-    label: "Degraded",
-    dot: "bg-amber-400",
-    text: "text-amber-400",
-    bg: "bg-amber-500/[0.07]",
-    border: "border-amber-500/20",
-    icon: AlertTriangle,
-    glow: "shadow-[0_0_20px_rgba(251,191,36,0.12)]",
-  },
-  outage: {
-    label: "Outage",
-    dot: "bg-red-400",
-    text: "text-red-400",
-    bg: "bg-red-500/[0.07]",
-    border: "border-red-500/20",
-    icon: XCircle,
-    glow: "shadow-[0_0_20px_rgba(248,113,113,0.15)]",
-  },
+const STATUS_COLOR = {
+  operational: "#1b9e3e",
+  degraded:    "#c27c0e",
+  outage:      "#b42a2a",
 };
 
-const OVERALL_BANNERS = {
-  operational: {
-    bg: "bg-emerald-500/[0.06]",
-    border: "border-emerald-500/20",
-    iconBg: "bg-emerald-500/10 border-emerald-500/20",
-    iconColor: "text-emerald-400",
-    titleColor: "text-emerald-300",
-    glow: "shadow-[0_0_60px_rgba(52,211,153,0.07)]",
-  },
-  degraded: {
-    bg: "bg-amber-500/[0.06]",
-    border: "border-amber-500/20",
-    iconBg: "bg-amber-500/10 border-amber-500/20",
-    iconColor: "text-amber-400",
-    titleColor: "text-amber-300",
-    glow: "shadow-[0_0_60px_rgba(251,191,36,0.07)]",
-  },
-  outage: {
-    bg: "bg-red-500/[0.06]",
-    border: "border-red-500/20",
-    iconBg: "bg-red-500/10 border-red-500/20",
-    iconColor: "text-red-400",
-    titleColor: "text-red-300",
-    glow: "shadow-[0_0_60px_rgba(248,113,113,0.07)]",
-  },
+const INC_LABELS: Record<string, string> = {
+  investigating: "Investigating",
+  identified:    "Identified",
+  monitoring:    "Monitoring",
+  resolved:      "Resolved",
+  update:        "Update",
 };
 
-function UptimeBars({ status }: { status: "operational" | "degraded" | "outage" }) {
+function fmt(iso: string) {
+  return new Date(iso).toLocaleString([], {
+    month: "short", day: "numeric", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" });
+}
+
+function fmtShort(iso: string) {
+  return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+// Generate 90 uptime bars. Incidents may mark specific days as degraded.
+function UptimeBars({
+  status, incidents, component,
+}: { status: string; incidents: Incident[]; component: string }) {
+  const now = Date.now();
+  const DAY = 86_400_000;
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [tooltip, setTooltip] = useState<{ x: number; label: string; s: string } | null>(null);
+
   const bars = Array.from({ length: 90 }, (_, i) => {
-    const seed = i * 7 + 13;
-    if (status === "outage" && i >= 87) return "outage";
-    if (status === "degraded" && (i === 73 || i === 61 || i === 88)) return "degraded";
-    if (seed % 47 === 0) return "degraded";
-    return "operational";
+    const dayStart = now - (89 - i) * DAY;
+    const dayEnd   = dayStart + DAY;
+    // Check if any incident overlaps this day for this component
+    const hit = incidents.find(inc => {
+      if (inc.components.length && !inc.components.includes(component)) return false;
+      const created = new Date(inc.created_at).getTime();
+      const resolved = inc.resolved_at ? new Date(inc.resolved_at).getTime() : now;
+      return created < dayEnd && resolved > dayStart;
+    });
+    const s = hit
+      ? (hit.status === "identified" ? "outage" : "degraded")
+      : (i === 89 ? status : "operational");
+    const date = new Date(dayStart);
+    const label = date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+    return { s, label };
   });
 
+  const upCount = bars.filter(b => b.s === "operational").length;
+  const uptimePct = ((upCount / 90) * 100).toFixed(2);
+
   return (
-    <div className="flex items-end gap-[2px] h-8">
-      {bars.map((s, i) => (
+    <div className="relative">
+      <div className="flex items-end gap-[2px] h-7">
+        {bars.map((bar, i) => (
+          <div
+            key={i}
+            className="flex-1 cursor-default"
+            style={{
+              height: "100%",
+              backgroundColor:
+                bar.s === "operational" ? "#1b9e3e" :
+                bar.s === "degraded"    ? "#c27c0e" : "#b42a2a",
+              borderRadius: 1,
+              opacity: 0.85,
+            }}
+            onMouseEnter={e => {
+              const rect = (e.target as HTMLElement).getBoundingClientRect();
+              const parent = (e.target as HTMLElement).closest(".uptime-wrap")!.getBoundingClientRect();
+              setTooltip({ x: rect.left - parent.left + rect.width / 2, label: bar.label, s: bar.s });
+            }}
+            onMouseLeave={() => setTooltip(null)}
+          />
+        ))}
+      </div>
+
+      {tooltip && (
         <div
-          key={i}
-          className={`flex-1 rounded-sm transition-all ${
-            s === "operational" ? "bg-emerald-500/60 hover:bg-emerald-400"
-            : s === "degraded" ? "bg-amber-500/60 hover:bg-amber-400"
-            : "bg-red-500/60 hover:bg-red-400"
-          }`}
-          style={{ height: s === "operational" ? "100%" : s === "degraded" ? "70%" : "50%" }}
-          title={`Day ${90 - i}: ${s}`}
-        />
-      ))}
+          ref={tooltipRef}
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 8px)",
+            left: tooltip.x,
+            transform: "translateX(-50%)",
+            background: "#1a1a1a",
+            border: "1px solid rgba(255,255,255,0.12)",
+            borderRadius: 6,
+            padding: "6px 10px",
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            zIndex: 50,
+          }}
+        >
+          <div style={{ fontSize: 11, color: "#aaa", marginBottom: 2 }}>{tooltip.label}</div>
+          <div style={{
+            fontSize: 11, fontWeight: 600,
+            color: tooltip.s === "operational" ? "#1b9e3e" : tooltip.s === "degraded" ? "#c27c0e" : "#b42a2a",
+          }}>
+            {tooltip.s === "operational" ? "No downtime recorded." : tooltip.s === "degraded" ? "Degraded performance." : "Outage recorded."}
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 11, color: "#666" }}>
+        <span>90 days ago</span>
+        <span style={{ color: STATUS_COLOR[status as keyof typeof STATUS_COLOR] ?? "#1b9e3e" }}>
+          {uptimePct}% uptime
+        </span>
+        <span>Today</span>
+      </div>
     </div>
   );
 }
 
-function timeAgo(iso: string) {
-  const secs = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (secs < 5) return "just now";
-  if (secs < 60) return `${secs}s ago`;
-  if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-  return `${Math.floor(secs / 3600)}h ago`;
+// Simple SVG line chart
+function ResponseChart({ metrics, period }: { metrics: MetricDay[]; period: "day" | "week" | "month" }) {
+  const data = period === "day"
+    ? metrics.slice(-1)
+    : period === "week"
+    ? metrics.slice(-7)
+    : metrics;
+
+  const latest = metrics[metrics.length - 1];
+  const latestMs = latest?.avg_ms ?? 0;
+
+  if (data.length < 2) {
+    return (
+      <div style={{ height: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ fontSize: 12, color: "#555" }}>Not enough data yet. Check back after more status checks.</span>
+      </div>
+    );
+  }
+
+  const vals = data.map(d => d.avg_ms);
+  const maxV = Math.max(...vals, 1);
+  const W = 600; const H = 80;
+  const pts = vals.map((v, i) => {
+    const x = (i / (vals.length - 1)) * W;
+    const y = H - (v / maxV) * H * 0.85;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+
+  const labels = data.map(d => fmtShort(d.day));
+  const step = Math.max(1, Math.floor(labels.length / 5));
+  const shownLabels = labels.map((l, i) => (i % step === 0 || i === labels.length - 1) ? l : "");
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#ccc" }}>API Response Time</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: "#ccc" }}>{latestMs} ms</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 80, overflow: "visible" }}>
+        <defs>
+          <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.15" />
+            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polyline fill="none" stroke="#3b82f6" strokeWidth="1.5" points={pts} />
+        <polygon
+          fill="url(#chartGrad)"
+          points={`0,${H} ${pts} ${W},${H}`}
+        />
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+        {shownLabels.map((l, i) => (
+          <span key={i} style={{ fontSize: 10, color: "#555", minWidth: 0, textAlign: "center" }}>{l}</span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-function formatTime(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+// Group incidents by date label for past incidents section
+function groupIncidentsByDate(incidents: Incident[]) {
+  const map: Record<string, Incident[]> = {};
+  incidents.forEach(inc => {
+    const d = new Date(inc.created_at).toDateString();
+    if (!map[d]) map[d] = [];
+    map[d].push(inc);
+  });
+  return map;
 }
 
 export default function StatusPage() {
-  const [data, setData] = useState<StatusData | null>(null);
+  const [data, setData]       = useState<StatusData | null>(null);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [metrics, setMetrics] = useState<MetricDay[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [tick, setTick] = useState(0);
+  const [period, setPeriod]   = useState<"day" | "week" | "month">("week");
 
-  async function fetchStatus(manual = false) {
-    if (manual) setRefreshing(true);
+  async function load() {
     try {
-      const res = await fetch(`${API_URL}/api/status`);
-      if (!res.ok) throw new Error("Non-ok response");
-      const json = await res.json() as StatusData;
-      setData(json);
-      setError(false);
-      setLastRefresh(new Date().toISOString());
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-      if (manual) setRefreshing(false);
-    }
+      const [sRes, iRes, mRes] = await Promise.all([
+        fetch(`${API_URL}/api/status`),
+        fetch(`${API_URL}/api/status/incidents`),
+        fetch(`${API_URL}/api/status/metrics`),
+      ]);
+      if (sRes.ok) setData(await sRes.json() as StatusData);
+      if (iRes.ok) { const j = await iRes.json() as { incidents: Incident[] }; setIncidents(j.incidents ?? []); }
+      if (mRes.ok) { const j = await mRes.json() as { metrics: MetricDay[] }; setMetrics(j.metrics ?? []); }
+    } finally { setLoading(false); }
   }
 
-  useEffect(() => { void fetchStatus(); }, []);
-  useEffect(() => {
-    const iv = setInterval(() => { void fetchStatus(); }, 30_000);
-    return () => clearInterval(iv);
-  }, []);
-  useEffect(() => {
-    const iv = setInterval(() => setTick(t => t + 1), 5000);
-    return () => clearInterval(iv);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  useEffect(() => { void load(); }, []);
+  useEffect(() => { const iv = setInterval(() => void load(), 30_000); return () => clearInterval(iv); }, []);
 
   const overall = data?.status ?? "operational";
-  const banner = OVERALL_BANNERS[overall];
-  const BannerIcon = STATUS_CONFIG[overall].icon;
+  const banner  = BANNER[overall];
 
-  const uptimePct = data
-    ? data.components.filter(c => c.status === "operational").length / data.components.length * 100
-    : 100;
+  // Past 14 days for the incidents section
+  const pastDays: string[] = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    pastDays.push(d.toDateString());
+  }
+  const incByDate = groupIncidentsByDate(incidents);
+
+  const s: React.CSSProperties = {
+    fontFamily: "'Inter', 'Plus Jakarta Sans', system-ui, sans-serif",
+    background: "#03060f",
+    color: "#e2e8f0",
+    minHeight: "100vh",
+  };
 
   return (
-    <div className="min-h-screen" style={{ background: "#03060f" }}>
+    <div style={s}>
+      {/* Banner */}
+      <div style={{ background: banner.bg, padding: "14px 20px", textAlign: "center" }}>
+        <span style={{ color: "#fff", fontWeight: 700, fontSize: 15 }}>{banner.text}</span>
+      </div>
+
       {/* Nav */}
-      <nav className="border-b border-white/[0.06] bg-white/[0.015] backdrop-blur-xl sticky top-0 z-50">
-        <div className="max-w-4xl mx-auto px-5 h-14 flex items-center justify-between">
-          <Link href="/">
-            <a className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
-              <SkySmsLogo className="h-7" />
-            </a>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/">
-              <a className="text-[12px] text-slate-500 hover:text-white transition-colors flex items-center gap-1.5">
-                <ExternalLink className="h-3 w-3" /> Back to app
-              </a>
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <div style={{
+        borderBottom: "1px solid rgba(255,255,255,0.08)",
+        padding: "0 20px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        height: 52, background: "rgba(255,255,255,0.015)",
+      }}>
+        <Link href="/">
+          <a style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
+            <SkySmsLogo className="h-7" />
+          </a>
+        </Link>
+        <Link href="/">
+          <a style={{ fontSize: 12, color: "#64748b", textDecoration: "none" }}>← Back to app</a>
+        </Link>
+      </div>
 
-      <div className="max-w-4xl mx-auto px-5 py-10 space-y-8">
+      <div style={{ maxWidth: 780, margin: "0 auto", padding: "36px 20px 60px" }}>
 
-        {/* Page title */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-white mb-1">System Status</h1>
-            <p className="text-[13px] text-slate-500">
-              Real-time status of all SKY SMS services.
+        {/* Header */}
+        <div style={{ marginBottom: 28 }}>
+          <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: "#f1f5f9" }}>SKY SMS Status</h1>
+          {data && (
+            <p style={{ fontSize: 12, color: "#475569", margin: "4px 0 0" }}>
+              Last updated: {fmt(data.checkedAt)} · Auto-refreshes every 30s
             </p>
-          </div>
-          <button
-            onClick={() => fetchStatus(true)}
-            disabled={refreshing}
-            className="shrink-0 flex items-center gap-2 h-9 px-4 rounded-xl border border-white/[0.1] bg-white/[0.04] text-[12px] font-semibold text-slate-400 hover:text-white hover:bg-white/[0.08] transition-all disabled:opacity-50"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
+          )}
         </div>
 
-        {/* Overall status banner */}
         {loading ? (
-          <div className="h-32 rounded-2xl border border-white/[0.07] bg-white/[0.02] animate-pulse" />
-        ) : error ? (
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/[0.05] p-8 text-center">
-            <XCircle className="h-8 w-8 text-red-400 mx-auto mb-3" />
-            <p className="text-[14px] font-bold text-white mb-1">Could not fetch status</p>
-            <p className="text-[12px] text-slate-500">The status endpoint is unreachable. Please try refreshing.</p>
-          </div>
-        ) : data ? (
-          <div className={`rounded-2xl border ${banner.border} ${banner.bg} ${banner.glow} p-7 flex items-center gap-5`}>
-            <div className={`h-14 w-14 rounded-2xl border flex items-center justify-center shrink-0 ${banner.iconBg}`}>
-              <BannerIcon className={`h-7 w-7 ${banner.iconColor}`} />
+          <div style={{ color: "#475569", fontSize: 13 }}>Loading…</div>
+        ) : (
+          <>
+            {/* Components / uptime bars */}
+            <p style={{ fontSize: 13, color: "#64748b", marginBottom: 14 }}>
+              Uptime over the past 90 days.
+            </p>
+            <div style={{
+              border: "1px solid rgba(255,255,255,0.09)",
+              borderRadius: 8,
+              overflow: "hidden",
+              marginBottom: 36,
+            }}>
+              {(data?.components ?? []).map((comp, i) => (
+                <div
+                  key={comp.name}
+                  className="uptime-wrap"
+                  style={{
+                    padding: "16px 20px",
+                    borderBottom: i < (data?.components.length ?? 0) - 1
+                      ? "1px solid rgba(255,255,255,0.07)"
+                      : "none",
+                    position: "relative",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0" }}>{comp.name}</span>
+                    <span style={{
+                      fontSize: 12, fontWeight: 600,
+                      color: STATUS_COLOR[comp.status] ?? "#1b9e3e",
+                    }}>
+                      {comp.status === "operational" ? "Operational"
+                        : comp.status === "degraded" ? "Degraded Performance"
+                        : "Major Outage"}
+                    </span>
+                  </div>
+                  <UptimeBars status={comp.status} incidents={incidents} component={comp.name} />
+                </div>
+              ))}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className={`text-xl font-black mb-1 ${banner.titleColor}`}>{data.message}</div>
-              <div className="text-[12px] text-slate-500 flex items-center gap-1.5">
-                <Clock className="h-3 w-3" />
-                Last checked: {formatTime(data.checkedAt)}
-                {lastRefresh && (
-                  <span className="ml-1 text-slate-600">· updated {timeAgo(lastRefresh)}</span>
-                )}
+
+            {/* System Metrics */}
+            <div style={{ marginBottom: 36 }}>
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14,
+              }}>
+                <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: "#475569", textTransform: "uppercase" }}>
+                  System Metrics
+                </span>
+                <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.06)", borderRadius: 6, padding: 2 }}>
+                  {(["day", "week", "month"] as const).map(p => (
+                    <button
+                      key={p}
+                      onClick={() => setPeriod(p)}
+                      style={{
+                        padding: "3px 12px", borderRadius: 4, fontSize: 12, border: "none", cursor: "pointer",
+                        background: period === p ? "rgba(255,255,255,0.12)" : "transparent",
+                        color: period === p ? "#e2e8f0" : "#64748b",
+                        fontWeight: period === p ? 600 : 400,
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      {p.charAt(0).toUpperCase() + p.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{
+                border: "1px solid rgba(255,255,255,0.09)",
+                borderRadius: 8, padding: "16px 20px",
+              }}>
+                <ResponseChart metrics={metrics} period={period} />
               </div>
             </div>
-            <div className="shrink-0 text-right hidden sm:block">
-              <div className="text-2xl font-black text-white">{uptimePct.toFixed(0)}%</div>
-              <div className="text-[10px] text-slate-600 uppercase tracking-wider">Systems online</div>
-            </div>
-          </div>
-        ) : null}
 
-        {/* Component list */}
-        {!loading && !error && data && (
-          <div className="space-y-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-600 px-1">Components</div>
-            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] overflow-hidden">
-              {data.components.map((comp, i) => {
-                const cfg = STATUS_CONFIG[comp.status] ?? STATUS_CONFIG.operational;
-                const Icon = COMPONENT_ICONS[comp.name] ?? Server;
-                const StatusIcon = cfg.icon;
+            {/* Past Incidents */}
+            <div>
+              <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: "0.12em", color: "#475569", textTransform: "uppercase" }}>
+                Past Incidents
+              </span>
+
+              {[...pastDays].reverse().map(dayStr => {
+                const dayIncidents = incByDate[dayStr] ?? [];
+                const dateLabel = fmtDate(new Date(dayStr).toISOString());
                 return (
-                  <div
-                    key={comp.name}
-                    className={`flex items-center gap-4 px-5 py-4 ${
-                      i < data.components.length - 1 ? "border-b border-white/[0.04]" : ""
-                    } hover:bg-white/[0.02] transition-colors`}
-                  >
-                    <div className="h-9 w-9 rounded-xl bg-white/[0.04] border border-white/[0.07] flex items-center justify-center shrink-0">
-                      <Icon className="h-4 w-4 text-slate-500" />
+                  <div key={dayStr} style={{ marginTop: 20 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "#94a3b8", marginBottom: 6 }}>
+                      {dateLabel}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-semibold text-white mb-0.5">{comp.name}</div>
-                      <div className="text-[11px] text-slate-600 truncate">{comp.message}</div>
-                    </div>
-                    {comp.responseTime !== undefined && (
-                      <div className="hidden sm:block text-right shrink-0">
-                        <div className="text-[11px] font-semibold text-slate-400">{comp.responseTime}ms</div>
-                        <div className="text-[9px] text-slate-700 uppercase tracking-wider">Response</div>
+                    <div style={{ height: 1, background: "rgba(255,255,255,0.08)", marginBottom: 10 }} />
+                    {dayIncidents.length === 0 ? (
+                      <p style={{ fontSize: 13, color: "#475569", margin: 0 }}>
+                        {dayStr === new Date().toDateString() ? "No incidents reported today." : "No incidents reported."}
+                      </p>
+                    ) : dayIncidents.map(inc => (
+                      <div key={inc.id} style={{ marginBottom: 16 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                          <span style={{
+                            fontSize: 12, fontWeight: 700,
+                            color: inc.status === "resolved" ? "#1b9e3e"
+                              : inc.status === "identified" ? "#b42a2a" : "#c27c0e",
+                            textTransform: "uppercase", letterSpacing: "0.08em",
+                          }}>
+                            {INC_LABELS[inc.status] ?? inc.status}
+                          </span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0" }}>{inc.title}</span>
+                        </div>
+                        <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 4px" }}>{inc.body}</p>
+                        {inc.components.length > 0 && (
+                          <p style={{ fontSize: 11, color: "#475569", margin: "0 0 4px" }}>
+                            Affected: {inc.components.join(", ")}
+                          </p>
+                        )}
+                        <p style={{ fontSize: 11, color: "#475569", margin: 0 }}>{fmt(inc.created_at)}</p>
+                        {inc.updates.length > 0 && (
+                          <div style={{ marginTop: 8, paddingLeft: 12, borderLeft: "2px solid rgba(255,255,255,0.1)" }}>
+                            {inc.updates.map(u => (
+                              <div key={u.id} style={{ marginBottom: 6 }}>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                                  {INC_LABELS[u.status] ?? u.status}
+                                </span>
+                                <span style={{ fontSize: 11, color: "#475569", marginLeft: 6 }}>{fmt(u.created_at)}</span>
+                                <p style={{ fontSize: 13, color: "#94a3b8", margin: "2px 0 0" }}>{u.body}</p>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    )}
-                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-bold shrink-0 ${cfg.bg} ${cfg.border} ${cfg.text}`}>
-                      <StatusIcon className="h-3 w-3" />
-                      {cfg.label}
-                    </div>
+                    ))}
                   </div>
                 );
               })}
             </div>
-          </div>
+          </>
         )}
-
-        {/* Uptime history */}
-        {!loading && !error && data && (
-          <div className="space-y-3">
-            <div className="text-[10px] font-bold uppercase tracking-[0.25em] text-slate-600 px-1">90-Day History</div>
-            <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 space-y-5">
-              {data.components.map(comp => {
-                const cfg = STATUS_CONFIG[comp.status] ?? STATUS_CONFIG.operational;
-                const uptime = comp.status === "operational" ? 99.9 : comp.status === "degraded" ? 99.2 : 95.0;
-                return (
-                  <div key={comp.name}>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[12px] font-semibold text-slate-300">{comp.name}</span>
-                      <span className={`text-[11px] font-bold ${cfg.text}`}>{uptime.toFixed(1)}% uptime</span>
-                    </div>
-                    <UptimeBars status={comp.status} />
-                    <div className="flex justify-between mt-1.5">
-                      <span className="text-[10px] text-slate-700">90 days ago</span>
-                      <span className="text-[10px] text-slate-700">Today</span>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Legend */}
-              <div className="flex items-center gap-4 pt-2 border-t border-white/[0.05]">
-                {[
-                  { color: "bg-emerald-500/60", label: "Operational" },
-                  { color: "bg-amber-500/60", label: "Degraded" },
-                  { color: "bg-red-500/60", label: "Outage" },
-                ].map(l => (
-                  <div key={l.label} className="flex items-center gap-1.5">
-                    <div className={`h-2.5 w-2.5 rounded-sm ${l.color}`} />
-                    <span className="text-[10px] text-slate-600">{l.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Auto-refresh notice */}
-        <div className="flex items-center justify-center gap-2 text-[11px] text-slate-700">
-          <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Auto-refreshes every 30 seconds
-        </div>
-
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-white/[0.05] mt-12">
-        <div className="max-w-4xl mx-auto px-5 py-6 flex items-center justify-between gap-4">
-          <span className="text-[11px] text-slate-700">© {new Date().getFullYear()} SKY SMS. All rights reserved.</span>
-          <div className="flex items-center gap-4">
-            <Link href="/terms">
-              <a className="text-[11px] text-slate-700 hover:text-slate-400 transition-colors">Terms</a>
-            </Link>
-            <Link href="/refund-policy">
-              <a className="text-[11px] text-slate-700 hover:text-slate-400 transition-colors">Refund Policy</a>
-            </Link>
-          </div>
+      <div style={{
+        borderTop: "1px solid rgba(255,255,255,0.06)",
+        padding: "16px 20px",
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        maxWidth: 780, margin: "0 auto",
+      }}>
+        <span style={{ fontSize: 11, color: "#334155" }}>© {new Date().getFullYear()} SKY SMS</span>
+        <div style={{ display: "flex", gap: 16 }}>
+          <Link href="/terms"><a style={{ fontSize: 11, color: "#334155", textDecoration: "none" }}>Terms</a></Link>
+          <Link href="/refund-policy"><a style={{ fontSize: 11, color: "#334155", textDecoration: "none" }}>Refund Policy</a></Link>
         </div>
-      </footer>
+      </div>
     </div>
   );
 }
