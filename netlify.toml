@@ -21,7 +21,7 @@
 
 [build]
   base    = "."
-  command = "npm install -g pnpm@10 && pnpm install --frozen-lockfile && pnpm --filter @workspace/api-server run build:netlify && pnpm --filter @workspace/sim-rentals run build:netlify"
+  command = "pnpm install --frozen-lockfile && pnpm --filter @workspace/api-server run build:netlify && pnpm --filter @workspace/sim-rentals run build:netlify"
   publish = "artifacts/sim-rentals/dist"
 
 [build.environment]
