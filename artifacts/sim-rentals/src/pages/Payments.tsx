@@ -8,6 +8,7 @@ import {
   Loader2, CreditCard, ChevronDown, Wallet
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useLanguage } from "@/hooks/useLanguage";
 
 const API_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/+$/, "") ?? "";
 
@@ -104,6 +105,7 @@ function PaymentRow({ payment }: { payment: any }) {
 export default function Payments() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const { data: user } = useGetMe();
   const { data: paymentsData, isLoading: paymentsLoading } = useListPayments();
 
@@ -150,10 +152,10 @@ export default function Payments() {
   };
 
   const filters: Array<{ key: typeof filter; label: string }> = [
-    { key: "all",     label: "All" },
-    { key: "paid",    label: "Paid" },
-    { key: "pending", label: "Pending" },
-    { key: "failed",  label: "Failed" },
+    { key: "all",     label: t("filterAll") },
+    { key: "paid",    label: t("paid") },
+    { key: "pending", label: t("pending") },
+    { key: "failed",  label: t("failed") },
   ];
 
   return (
@@ -161,7 +163,7 @@ export default function Payments() {
 
       {/* Header */}
       <div>
-        <h1 className="font-display text-[22px] font-bold text-white tracking-tight">Top up balance</h1>
+        <h1 className="font-display text-[22px] font-bold text-white tracking-tight">{t("topUpBalance")}</h1>
         <p className="text-[13px] text-slate-500 mt-0.5">Add funds to your SKY SMS account.</p>
       </div>
 

@@ -6,6 +6,7 @@ import { useLocation } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "@/hooks/useLanguage";
 
 interface LiveCountry {
   code: string;
@@ -75,6 +76,7 @@ function SortButton({ active, onClick, children }: { active: boolean; onClick: (
 }
 
 export default function Rent() {
+  const { t } = useLanguage();
   const [serviceCode, setServiceCode] = useState<string>(
     () => new URLSearchParams(window.location.search).get("service") ?? ""
   );
@@ -159,7 +161,7 @@ export default function Rent() {
 
       {/* Header */}
       <div>
-        <h1 className="text-[17px] font-bold text-white">Rent a Number</h1>
+        <h1 className="text-[17px] font-bold text-white">{t("rentANumber")}</h1>
         <p className="text-slate-500 mt-0.5 text-[13px]">Pick a service and country. Prices refresh in real time.</p>
       </div>
 
@@ -175,7 +177,7 @@ export default function Rent() {
           <div className="space-y-2">
             <label className="flex items-center gap-2 text-[12px] font-semibold text-slate-400">
               <Server className="h-3.5 w-3.5 text-slate-600" />
-              Service
+              {t("service")}
             </label>
             <SearchableSelect
               value={serviceCode}
@@ -190,7 +192,7 @@ export default function Rent() {
               <div className="flex items-center justify-between gap-3 rounded-xl border border-red-400/20 bg-red-400/[0.06] px-3 py-2.5 text-[12px] text-red-200">
                 <span>Services failed to load.</span>
                 <button type="button" onClick={() => refetchServices()} className="font-bold text-red-100 flex items-center gap-1 hover:text-white transition-colors">
-                  <RefreshCw className="h-3 w-3" /> Retry
+                  <RefreshCw className="h-3 w-3" /> {t("retry")}
                 </button>
               </div>
             )}
@@ -203,7 +205,7 @@ export default function Rent() {
                 <div className="h-4.5 w-4.5 rounded-md bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center">
                   <Globe className="h-2.5 w-2.5 text-indigo-400" />
                 </div>
-                Country
+                {t("country")}
                 {serviceCode && loadingCountries && (
                   <Loader2 className="h-3 w-3 animate-spin text-slate-600" />
                 )}

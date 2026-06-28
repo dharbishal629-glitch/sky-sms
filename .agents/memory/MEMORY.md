@@ -1,0 +1,2 @@
+- [Language System](language-system.md) — useLanguage.tsx has full inline translations (en/hi/de/ru/fr); exports LanguageProvider, LangCode, LANGUAGES (with code/flag/label/nativeName), useLanguage() returning {lang, setLang, current, t}.
+- [Git Push Restriction](git-push.md) — git push to external remotes is blocked in the main agent sandbox; must delegate to project_tasks or give user shell commands to run themselves.

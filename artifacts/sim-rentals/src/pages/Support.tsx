@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { useLanguage } from "@/hooks/useLanguage";
 
 interface TicketMessage {
   id: string;
@@ -125,6 +126,7 @@ function TicketRow({ ticket }: { ticket: Ticket }) {
 export default function Support() {
   const qc = useQueryClient();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [, setLocation] = useLocation();
   const [showForm, setShowForm] = useState(false);
   const [subject, setSubject] = useState("");
@@ -162,7 +164,7 @@ export default function Support() {
         <div>
           <p className="text-[10px] font-bold uppercase tracking-[0.28em] text-sky-500 mb-1">Help Center</p>
           <h1 className="text-xl font-bold text-white flex items-center gap-2.5">
-            Support
+            {t("supportTitle")}
             {unreadCount > 0 && (
               <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400">
                 {unreadCount} new
@@ -187,7 +189,7 @@ export default function Support() {
             boxShadow: "0 3px 0 0 #075985, 0 6px 16px rgba(14,165,233,0.35), inset 0 1px 0 rgba(255,255,255,0.2)"
           } : {}}
         >
-          {showForm ? <><X className="h-3.5 w-3.5" /> Cancel</> : <><Plus className="h-3.5 w-3.5" /> New ticket</>}
+          {showForm ? <><X className="h-3.5 w-3.5" /> {t("cancel")}</> : <><Plus className="h-3.5 w-3.5" /> {t("newTicket")}</>}
         </button>
       </div>
 
@@ -205,7 +207,7 @@ export default function Support() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Subject</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t("ticketSubject")}</label>
             <input
               type="text"
               value={subject}
@@ -218,7 +220,7 @@ export default function Support() {
           </div>
 
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Message</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{t("ticketMessage")}</label>
             <textarea
               value={message}
               onChange={e => setMessage(e.target.value)}
@@ -240,7 +242,7 @@ export default function Support() {
               boxShadow: "0 3px 0 0 #075985, 0 6px 16px rgba(14,165,233,0.3), inset 0 1px 0 rgba(255,255,255,0.2)"
             }}
           >
-            {mutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</> : <><Send className="h-4 w-4" /> Submit Ticket</>}
+            {mutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</> : <><Send className="h-4 w-4" /> {t("submitTicket")}</>}
           </button>
         </form>
       )}

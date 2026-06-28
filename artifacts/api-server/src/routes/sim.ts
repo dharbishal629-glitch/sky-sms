@@ -2439,6 +2439,22 @@ router.post("/admin/support/:id/messages", async (req, res) => {
 
 export default router;
 
+export function startHealthCheckJob() {
+  const runCheck = async () => {
+    const start = Date.now();
+    try {
+      await pool.query("SELECT 1");
+      const ms = Date.now() - start;
+      await pool.query(
+        "INSERT INTO sim_status_metrics (metric, value, recorded_at) VALUES ('api_response_ms', $1, NOW())",
+        [ms],
+      );
+    } catch { /* DB offline — skip recording */ }
+  };
+  void runCheck();
+  setInterval(() => void runCheck(), 30_000);
+}
+
 export function startExpiredPaymentsCleaner() {
   const PAYMENT_TIMEOUT_MS = 20 * 60 * 1000;
   const CHECK_INTERVAL_MS = 60 * 1000;

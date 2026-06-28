@@ -4,6 +4,7 @@ import { Phone, AlertCircle, ChevronRight, Plus, Clock, ArrowRight } from "lucid
 import { format, differenceInSeconds } from "date-fns";
 import { Link } from "wouter";
 import { useState, useEffect } from "react";
+import { useLanguage } from "@/hooks/useLanguage";
 
 function svcIcon(domain: string) {
   return `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://${domain}&size=128`;
@@ -53,6 +54,7 @@ const statusMap: Record<string, { label: string; dot: string }> = {
 export default function Dashboard() {
   const { data, isLoading, error } = useGetDashboard();
   const { data: user } = useGetMe();
+  const { t } = useLanguage();
 
   if (isLoading) {
     return (
@@ -84,10 +86,10 @@ export default function Dashboard() {
   }
 
   const stats = [
-    { label: "Balance",   value: `$${(data?.balance ?? 0).toFixed(2)}`, sub: data?.balance === 0 ? "Add funds" : "Available",       link: "/payments" },
-    { label: "Active",    value: String(data?.activeRentals ?? 0),       sub: data?.activeRentals === 1 ? "1 active rental" : "active rentals", link: "/rentals" },
-    { label: "Completed", value: String(data?.totalRentals ?? 0),         sub: "total rentals",                                      link: "/rentals" },
-    { label: "SMS",       value: String(data?.smsReceived ?? 0),           sub: "codes received",                                     link: "/rentals" },
+    { label: t("balance"),        value: `$${(data?.balance ?? 0).toFixed(2)}`, sub: data?.balance === 0 ? t("addFunds") : "Available",  link: "/payments" },
+    { label: t("filterActive"),   value: String(data?.activeRentals ?? 0),       sub: t("activeRentals"),                                 link: "/rentals" },
+    { label: "Completed",         value: String(data?.totalRentals ?? 0),         sub: "total rentals",                                    link: "/rentals" },
+    { label: "SMS",               value: String(data?.smsReceived ?? 0),           sub: t("smsReceived"),                                   link: "/rentals" },
   ];
 
   const rentals = data?.recentRentals ?? [];
@@ -98,9 +100,9 @@ export default function Dashboard() {
       {/* Header */}
       <div>
         <h1 className="font-display text-[22px] font-bold text-white tracking-tight">
-          Welcome back{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
+          {t("welcomeBack")}{user?.name ? `, ${user.name.split(" ")[0]}` : ""}
         </h1>
-        <p className="text-[13px] text-slate-500 mt-0.5">Here's your account overview.</p>
+        <p className="text-[13px] text-slate-500 mt-0.5">{t("recentActivity")}</p>
       </div>
 
       {/* Stats */}
@@ -119,10 +121,10 @@ export default function Dashboard() {
       {/* Recent Rentals */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-[14px] font-semibold text-white">Recent Rentals</h2>
+          <h2 className="text-[14px] font-semibold text-white">{t("recentActivity")}</h2>
           <Link href="/rentals">
             <span className="flex items-center gap-1 text-[12px] text-slate-400 hover:text-white transition-colors cursor-pointer font-medium">
-              View all <ChevronRight className="h-3.5 w-3.5" />
+              {t("viewAllRentals")} <ChevronRight className="h-3.5 w-3.5" />
             </span>
           </Link>
         </div>
@@ -133,11 +135,11 @@ export default function Dashboard() {
               <div className="h-11 w-11 rounded-xl border border-white/[0.06] flex items-center justify-center mx-auto mb-3">
                 <Phone className="h-5 w-5 text-slate-700" />
               </div>
-              <p className="text-[13px] text-slate-400 font-medium mb-1">No rentals yet</p>
+              <p className="text-[13px] text-slate-400 font-medium mb-1">{t("noActiveRentals")}</p>
               <p className="text-[12px] text-slate-700">Rent your first number to get started.</p>
               <Link href="/rent">
                 <span className="inline-flex items-center gap-1.5 mt-4 text-[12px] text-sky-400 hover:text-sky-300 transition-colors cursor-pointer font-semibold">
-                  <ArrowRight className="h-3 w-3" /> Rent a number
+                  <ArrowRight className="h-3 w-3" /> {t("getRentNow")}
                 </span>
               </Link>
             </div>
@@ -196,7 +198,7 @@ export default function Dashboard() {
               <Phone className="h-4 w-4 text-slate-400 group-hover:text-sky-400 transition-colors" />
             </div>
             <div>
-              <p className="text-[13px] font-bold text-white">Rent Number</p>
+              <p className="text-[13px] font-bold text-white">{t("rentNumber")}</p>
               <p className="text-[11px] text-slate-600">Get a virtual SIM</p>
             </div>
           </div>
@@ -207,8 +209,8 @@ export default function Dashboard() {
               <Plus className="h-4 w-4 text-slate-400 group-hover:text-sky-400 transition-colors" />
             </div>
             <div>
-              <p className="text-[13px] font-bold text-white">Add Funds</p>
-              <p className="text-[11px] text-slate-600">Top up balance</p>
+              <p className="text-[13px] font-bold text-white">{t("addFunds")}</p>
+              <p className="text-[11px] text-slate-600">{t("topUp")}</p>
             </div>
           </div>
         </Link>

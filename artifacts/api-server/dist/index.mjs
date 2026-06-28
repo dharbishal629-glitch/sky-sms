@@ -50287,6 +50287,22 @@ router3.post("/admin/support/:id/messages", async (req, res) => {
   res.json({ ticket: await mapSupportTicket(updated.rows[0], "admin") });
 });
 var sim_default = router3;
+function startHealthCheckJob() {
+  const runCheck = async () => {
+    const start2 = Date.now();
+    try {
+      await pool.query("SELECT 1");
+      const ms = Date.now() - start2;
+      await pool.query(
+        "INSERT INTO sim_status_metrics (metric, value, recorded_at) VALUES ('api_response_ms', $1, NOW())",
+        [ms]
+      );
+    } catch {
+    }
+  };
+  void runCheck();
+  setInterval(() => void runCheck(), 3e4);
+}
 function startExpiredPaymentsCleaner() {
   const PAYMENT_TIMEOUT_MS = 20 * 60 * 1e3;
   const CHECK_INTERVAL_MS = 60 * 1e3;
@@ -50433,6 +50449,7 @@ async function start() {
     }
     logger.info({ port }, "Server listening");
     startExpiredPaymentsCleaner();
+    startHealthCheckJob();
   });
 }
 start().catch((err) => {

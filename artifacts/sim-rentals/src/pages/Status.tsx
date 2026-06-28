@@ -216,13 +216,17 @@ function groupIncidentsByDate(incidents: Incident[]) {
 }
 
 export default function StatusPage() {
-  const [data, setData]       = useState<StatusData | null>(null);
+  const [data, setData]         = useState<StatusData | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
-  const [metrics, setMetrics] = useState<MetricDay[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [period, setPeriod]   = useState<"day" | "week" | "month">("week");
+  const [metrics, setMetrics]   = useState<MetricDay[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [checking, setChecking] = useState(false);
+  const [secsLeft, setSecsLeft] = useState(30);
+  const [period, setPeriod]     = useState<"day" | "week" | "month">("week");
+  const lastLoadRef = useRef<number>(Date.now());
 
   async function load() {
+    setChecking(true);
     try {
       const [sRes, iRes, mRes] = await Promise.all([
         fetch(`${API_URL}/api/status`),
@@ -232,11 +236,25 @@ export default function StatusPage() {
       if (sRes.ok) setData(await sRes.json() as StatusData);
       if (iRes.ok) { const j = await iRes.json() as { incidents: Incident[] }; setIncidents(j.incidents ?? []); }
       if (mRes.ok) { const j = await mRes.json() as { metrics: MetricDay[] }; setMetrics(j.metrics ?? []); }
-    } finally { setLoading(false); }
+    } finally {
+      setChecking(false);
+      setLoading(false);
+      lastLoadRef.current = Date.now();
+      setSecsLeft(30);
+    }
   }
 
   useEffect(() => { void load(); }, []);
   useEffect(() => { const iv = setInterval(() => void load(), 30_000); return () => clearInterval(iv); }, []);
+
+  // Countdown ticks every second
+  useEffect(() => {
+    const iv = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - lastLoadRef.current) / 1000);
+      setSecsLeft(Math.max(0, 30 - elapsed));
+    }, 1000);
+    return () => clearInterval(iv);
+  }, []);
 
   const overall = data?.status ?? "operational";
   const banner  = BANNER[overall];
@@ -273,7 +291,7 @@ export default function StatusPage() {
       }}>
         <Link href="/">
           <a style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
-            <SkySmsLogo className="h-7" />
+            <SkySmsLogo size="sm" />
           </a>
         </Link>
         <Link href="/">
@@ -286,11 +304,26 @@ export default function StatusPage() {
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: "#f1f5f9" }}>SKY SMS Status</h1>
-          {data && (
-            <p style={{ fontSize: 12, color: "#475569", margin: "4px 0 0" }}>
-              Last updated: {fmt(data.checkedAt)} · Auto-refreshes every 30s
-            </p>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+            {checking ? (
+              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#38bdf8" }}>
+                <span style={{
+                  display: "inline-block", width: 6, height: 6, borderRadius: "50%",
+                  background: "#38bdf8", animation: "pulse 1s ease-in-out infinite",
+                }} />
+                Checking…
+              </span>
+            ) : data ? (
+              <span style={{ fontSize: 11, color: "#475569" }}>
+                Last checked: {fmt(data.checkedAt)}
+              </span>
+            ) : null}
+            {!checking && (
+              <span style={{ fontSize: 11, color: "#334155" }}>
+                · Next check in {secsLeft}s
+              </span>
+            )}
+          </div>
         </div>
 
         {loading ? (

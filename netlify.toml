@@ -1,0 +1,22 @@
+[build]
+  base      = "."
+  command   = "npm install -g pnpm@10 && pnpm install --frozen-lockfile && pnpm --filter @workspace/sim-rentals run build:netlify"
+  publish   = "artifacts/sim-rentals/dist"
+
+[build.environment]
+  NODE_VERSION   = "22"
+  PNPM_VERSION   = "10"
+
+# Proxy all /api/* calls to your deployed API server.
+# Replace the `to` URL with your Replit deployed-app URL after deployment.
+[[redirects]]
+  from   = "/api/*"
+  to     = "https://YOUR-REPLIT-DEPLOYED-URL/api/:splat"
+  status = 200
+  force  = true
+
+# SPA fallback — every other route serves index.html
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
