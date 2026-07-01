@@ -6,6 +6,7 @@
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) if [ \"$CI\" = \"true\" ] || [ \"$RENDER\" = \"true\" ]; then exit 0; fi; echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "build:render": "pnpm --filter @workspace/sim-rentals run build:cloudflare && pnpm --filter @workspace/api-server run build",
+    "build:vercel": "pnpm --filter @workspace/api-server run build:vercel && pnpm --filter @workspace/sim-rentals run build:vercel",
     "start:render": "pnpm --filter @workspace/api-server start",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"

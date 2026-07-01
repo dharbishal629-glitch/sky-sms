@@ -1,3 +1,3 @@
 
-# Netlify function build output (generated at deploy time)
-netlify/functions/api.mjs
+# Vercel serverless function build output (generated at deploy time)
+/api/index.mjs

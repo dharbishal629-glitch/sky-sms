@@ -8,9 +8,12 @@ globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 
+// Vercel auto-detects Serverless Functions placed in the repo-root `api/`
+// directory, so the bundled handler is emitted there as `api/index.mjs`.
+const outDir = path.resolve(artifactDir, "../../api");
+
 async function buildAll() {
-  const distDir = path.resolve(artifactDir, "dist-vercel");
-  await rm(distDir, { recursive: true, force: true });
+  await rm(outDir, { recursive: true, force: true });
 
   await esbuild({
     entryPoints: [path.resolve(artifactDir, "src/handler.ts")],
@@ -18,8 +21,9 @@ async function buildAll() {
     target: "node20",
     bundle: true,
     format: "esm",
-    outdir: distDir,
+    outdir: outDir,
     outExtension: { ".js": ".mjs" },
+    entryNames: "index",
     logLevel: "info",
     alias: {
       "@workspace/db": path.resolve(artifactDir, "src/_workspace/db/index.ts"),
@@ -51,7 +55,11 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
   });
 }
 
-buildAll().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+buildAll()
+  .then(() => {
+    console.log(`\n✅ Vercel function built → ${outDir}/index.mjs\n`);
+  })
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });

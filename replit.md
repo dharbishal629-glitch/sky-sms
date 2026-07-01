@@ -38,6 +38,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - Admin service pricing supports global defaults plus country-specific overrides through `sim_service_country_prices`; country overrides take priority over global service prices. Admins select one service and one country from searchable dropdowns, type the price, and save.
 - Admins curate the public catalog through `sim_enabled_services`; only enabled service codes appear on the user Rent flow, country lookup, and rental creation.
 - Support tickets use `sim_support_messages` for threaded user/admin replies. Users can reply while tickets are open or in progress; resolved/closed tickets are read-only.
+- **Deployment**: hosted on Vercel (not Netlify). Root `vercel.json` drives an all-in-one deploy — `pnpm --filter @workspace/api-server run build:vercel` bundles the Express app into a repo-root `api/index.mjs` serverless function, and `pnpm --filter @workspace/sim-rentals run build:vercel` builds the static frontend into `artifacts/sim-rentals/dist`. `vercel.json` rewrites `/api/*` to the function and everything else to `index.html` for SPA routing. See `DEPLOYMENT.md` Option A.
 
 ## Key Commands
 

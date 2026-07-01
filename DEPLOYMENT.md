@@ -1,5 +1,31 @@
 # SKY SMS — Deployment Guide
 
+## Option A — All-in-one on Vercel (recommended, single deploy)
+
+The repo ships with a root `vercel.json` that builds and deploys **both** the frontend and the API together as one Vercel project — no separate frontend/API hosts needed.
+
+1. Push this repo to GitHub (or GitLab/Bitbucket) and import it in https://vercel.com/new
+2. Vercel reads `vercel.json` automatically:
+   - `buildCommand` builds the API into a serverless function at `api/index.mjs` and the frontend into `artifacts/sim-rentals/dist`
+   - `outputDirectory` serves the frontend as static files
+   - `rewrites` route `/api/*` to the serverless function and everything else to `index.html` (SPA routing)
+3. In Vercel → Project → Settings → Environment Variables, add:
+   ```
+   DATABASE_URL             = <PostgreSQL connection string — Neon/Supabase/Vercel Postgres>
+   SESSION_SECRET           = <any long random string>
+   NODE_ENV                 = production
+   ALLOWED_ORIGINS          = https://your-project.vercel.app
+   HERO_SMS_API_KEY         = <optional, enables live SMS rentals>
+   OXAPAY_MERCHANT_API_KEY  = <optional, enables live payments>
+   ```
+4. Click **Deploy** — every push to the connected branch redeploys automatically.
+
+This replaces the old Netlify setup; the API now targets Vercel's Node.js serverless runtime directly (no `serverless-http` wrapper needed).
+
+---
+
+## Option B — Split hosting (frontend + API on separate services)
+
 ## Files you need
 
 | File | Deploy to |
